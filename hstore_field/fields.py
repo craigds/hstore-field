@@ -18,6 +18,9 @@ def register_hstore_on_connection_creation(connection, sender, *args, **kwargs):
             pg_config = subprocess.Popen(["pg_config", "--sharedir"], stdout=subprocess.PIPE)
             share_dir = pg_config.communicate()[0].strip('\r\n ')
             hstore_sql = os.path.join(share_dir, 'contrib', 'hstore.sql')
+            if not os.path.exists(hstore_sql):
+                # fallback to a constant (pg_config might be another postgres install)
+                hstore_sql = '/usr/share/postgresql/9.0/contrib/hstore.sql'
             statements = re.compile(r";[ \t]*$", re.M)
             cursor = connection.cursor()
             with open(hstore_sql, 'U') as fp:
