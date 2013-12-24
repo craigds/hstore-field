@@ -3,35 +3,27 @@ import os
 import psycopg2
 import subprocess
 from django.conf import settings
-from django.db import models
+from django.db import models, DatabaseError
 from django.db.backends.signals import connection_created
 from psycopg2.extras import register_hstore, HstoreAdapter
 from . import forms
 
 
+_oids = {
+    # "dbname": (hstore oid, array oid),
+}
+
 def register_hstore_on_connection_creation(connection, sender, *args, **kwargs):
-    oid = HstoreAdapter.get_oids(connection.connection)
-    if oid is None or not oid[0]:
-        if connection.connection.server_version < 90000:
-            raise psycopg2.ProgrammingError("Database version not supported")
-        elif connection.connection.server_version < 90100:
-            pg_config = subprocess.Popen(["pg_config", "--sharedir"], stdout=subprocess.PIPE)
-            share_dir = pg_config.communicate()[0].strip('\r\n ')
-            hstore_sql = os.path.join(share_dir, 'contrib', 'hstore.sql')
-            if not os.path.exists(hstore_sql):
-                # fallback to a constant (pg_config might be another postgres install)
-                hstore_sql = '/usr/share/postgresql/9.0/contrib/hstore.sql'
-            statements = re.compile(r";[ \t]*$", re.M)
-            cursor = connection.cursor()
-            with open(hstore_sql, 'U') as fp:
-                for statement in statements.split(fp.read().decode(settings.FILE_CHARSET)):
-                    statement = re.sub(ur"--.*([\n\Z]|$)", "", statement).strip()
-                    if statement:
-                        cursor.execute(statement + u";")
-        else:
-            cursor = connection.cursor()
-            cursor.execute("CREATE EXTENSION hstore;")
-    register_hstore(connection.connection, globally=True)
+    dbname = connection.alias
+    if dbname not in _oids:
+        oids1, oids2 = HstoreAdapter.get_oids(connection.connection)
+        if not oids1 and not oids2:
+            raise DatabaseError("hstore isn't installed on this database")
+
+        _oids[dbname] = (oids1[0], oids2[0])
+
+    oid, array_oid = _oids[dbname]
+    register_hstore(connection.connection, globally=True, oid=oid, array_oid=array_oid)
 
 connection_created.connect(register_hstore_on_connection_creation, dispatch_uid='hstore_field.register_hstore_on_connection_creation')
 
