@@ -1,5 +1,6 @@
 import datetime
 import numbers
+import django
 from django.db.models.fields import FieldDoesNotExist
 from django.utils import tree
 from django.core.exceptions import FieldError
@@ -82,6 +83,8 @@ class HQ(tree.Node):
     query_terms = ['exact', 'iexact', 'lt', 'lte', 'gt', 'gte', 'in', 'contains']
 
     def __init__(self, **kwargs):
+        if django.VERSION >= (1, 6):
+            raise NotImplementedError("HQ objects don't work on django 1.6+")
         super(HQ, self).__init__(children=kwargs.items())
 
     def _combine(self, other, conn):
